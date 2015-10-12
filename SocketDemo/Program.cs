@@ -27,18 +27,32 @@ namespace SocketDemo
                     String encodedData = Encoding.ASCII.GetString(inData);
                     foreach (String line in encodedData.Split(new string[] { "\r\n"}, StringSplitOptions.RemoveEmptyEntries))
                     {
+                        string userHost;
+
                         if (line.Contains("\0"))
                             continue;
                         //Check for a prefix indicator.  If this isnt present the message cannot be processed
                         if (!line.Contains(':'))
                             throw new ArgumentOutOfRangeException("Unable to parse message. " + line);
-                        String[] parsedPrefix = line.Split(':')[1].Split(' ');
+
+                        String[] parsedPrefix = line.Split(new string[] { ":" }, StringSplitOptions.RemoveEmptyEntries)[0].Split(' ');
 
                         //Check if prefix is well formed
                         if (parsedPrefix.Count() < 2)
-                            throw new ArgumentOutOfRangeException("Unable to parse prefix. " + line);
+                        {
+                            int i = 0;
+                            while (RFC1459.commands.Contains(line.Split(':')[++i]   )  )
+                            {
+                                Console.WriteLine("no command detected");
+                                userHost = line.Split(':')[i];
+                            }
+                            
 
-                        string userHost = parsedPrefix[0];
+                        }
+                            //else
+                            //    throw new ArgumentOutOfRangeException("Unable to parse prefix. " + line);
+
+                        userHost = parsedPrefix[0];
                         string command = parsedPrefix[1];
                         string userName = parsedPrefix[2];
                         string logText = "";
