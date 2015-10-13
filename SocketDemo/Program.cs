@@ -10,7 +10,7 @@ namespace SocketDemo
 {
     class Program
     {
-        const int IN_BUFFER = 65536;
+        const int IN_BUFFER = 3200;
         static Socket m_Con;
         static Thread listenThread;
         static void Main(string[] args)
@@ -23,79 +23,80 @@ namespace SocketDemo
             SendString("USER tummyacid");
             listenThread = new Thread(() =>
             {
-            byte[] inData = new byte[IN_BUFFER];
-            StringBuilder inbound = new StringBuilder();
+                byte[] inData = new byte[IN_BUFFER];
+                StringBuilder inbound = new StringBuilder();
 
-            while (true)
-            {
-                int inSize = m_Con.Receive(inData, IN_BUFFER, SocketFlags.None);
-                       // if ((inbound.Length % IN_BUFFER) == 0)
-                inbound.Append(Encoding.ASCII.GetString(inData).Replace("\0", ""));
-                    if (inSize == IN_BUFFER)
+                    using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"bouncer.txt", true))
+                while (true)
+                {
+                    int inSize = m_Con.Receive(inData, IN_BUFFER, SocketFlags.None);
+                    file.WriteLine(Encoding.ASCII.GetString(inData));
+                    // if ((inbound.Length % IN_BUFFER) == 0)
+                    inbound.Append(Encoding.ASCII.GetString(inData).Replace("\0", ""));
+                if (inSize == IN_BUFFER)
                         continue;
 
-                     using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"bouncer.txt", true))
-                    foreach (String line in inbound.ToString().Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries))
-                    {
-                        String extra;
-                        String target;
-
-//                        file.WriteLine(line);
-                        //Check for a prefix indicator.  If this isnt present the message cannot be processed.  We should probably throw an exception.
-                        if (!line.Contains(':'))
-                            continue;
-
-                        String prefix = line.Substring(line.IndexOf(':')).Split(' ')[0];
-
-                        //Check if prefix is well formed
-                        if (prefix.Length == 0)
-                            throw new Exception("unable to parse prefix");
-                        
-                        string command = line.Substring(prefix.Length).Split(new char[] { ':' }, StringSplitOptions.RemoveEmptyEntries)[0];
-                        string logText = "";
-
-                        //Check if source is blacklisted
-                        //if (m_BlackListHosts.Contains(prefix))
-                        //{
-                        //    //TODO log this?
-                        //    return;
-                        //}
-
-                        try
+                        foreach (String line in inbound.ToString().Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries))
                         {
-                            extra = line.Substring(command.Length + prefix.Length);
-                            if (extra.Length > 0)
-                                extra = extra.Substring(1); //Remove the ':' cos who needs it?
-                        }
-                        catch (Exception ex)
-                        {
-                            throw new Exception("pasring error", ex);
-                        }
-                        //Examine the command
-                        if ((command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0].Length == 3) &&
-                            (!command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0].Equals("WHO")))//duurrrrr?
-                        {
-                            logText = " number ";
-                        }
-                        else
-                            switch (command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0])
+                            String extra;
+                            String target;
+
+                            //                        file.WriteLine(line);
+                            //Check for a prefix indicator.  If this isnt present the message cannot be processed.  We should probably throw an exception.
+                            if (!line.Contains(':'))
+                                continue;
+
+                            String prefix = line.Substring(line.IndexOf(':')).Split(' ')[0];
+
+                            //Check if prefix is well formed
+                            if (prefix.Length == 0)
+                                throw new Exception("unable to parse prefix");
+
+                            string command = line.Substring(prefix.Length).Split(new char[] { ':' }, StringSplitOptions.RemoveEmptyEntries)[0];
+                            string logText = "";
+
+                            //Check if source is blacklisted
+                            //if (m_BlackListHosts.Contains(prefix))
+                            //{
+                            //    //TODO log this?
+                            //    return;
+                            //}
+
+                            try
                             {
-                                case "NOTICE":
-                                case "PRIVMSG":
-                                    target = command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[1];
-                                    if (target.Equals("AUTH"))
-                                    {
-                                        SendString("PASS tummyacid:s");
-                                        SendString("NICK tummyacid");
-                                    }
-                                    logText = target + prefix.Split('!')[0] + "> " + extra;
-                                    break;
-                                default:
-                                    logText = "Unknown Command " + command;
-                                    break;
+                                extra = line.Substring(command.Length + prefix.Length);
+                                if (extra.Length > 0)
+                                    extra = extra.Substring(1); //Remove the ':' cos who needs it?
                             }
-                        Console.WriteLine(logText);
-                    }
+                            catch (Exception ex)
+                            {
+                                throw new Exception("pasring error", ex);
+                            }
+                            //Examine the command
+                            if ((command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0].Length == 3) &&
+                                (!command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0].Equals("WHO")))//duurrrrr?
+                            {
+                                logText = " number ";
+                            }
+                            else
+                                switch (command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0])
+                                {
+                                    case "NOTICE":
+                                    case "PRIVMSG":
+                                        target = command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[1];
+                                        if (target.Equals("AUTH"))
+                                        {
+                                            SendString("PASS tummyacid:s");
+                                            SendString("NICK tummyacid");
+                                        }
+                                        logText = target + prefix.Split('!')[0] + "> " + extra;
+                                        break;
+                                    default:
+                                        logText = "Unknown Command " + command;
+                                        break;
+                                }
+                            Console.WriteLine(logText);
+                        }
                     inbound.Clear();
                 }//Read socket again
             });
