@@ -10,6 +10,7 @@ namespace SocketDemo
 {
     class Program
     {
+        const int IN_BUFFER = 65536;
         static Socket m_Con;
         static Thread listenThread;
         static void Main(string[] args)
@@ -19,87 +20,91 @@ namespace SocketDemo
 
             //              m_Con.Connect(System.Net.Dns.Resolve("irc.freenode.net").AddressList[0], 6667);              
             m_Con.Connect(System.Net.IPAddress.Parse("192.40.56.139"), 3133);
+            SendString("USER tummyacid");
             listenThread = new Thread(() =>
             {
-                byte[] inData = new byte[10240];
-                while (m_Con.Receive(inData, 10240, SocketFlags.None) > 0)
-                {
-                    String encodedData = Encoding.ASCII.GetString(inData);
-                    foreach (String line in encodedData.Split(new string[] { "\r\n"}, StringSplitOptions.RemoveEmptyEntries))
+            byte[] inData = new byte[IN_BUFFER];
+            StringBuilder inbound = new StringBuilder();
+
+            while (true)
+            {
+                int inSize = m_Con.Receive(inData, IN_BUFFER, SocketFlags.None);
+                       // if ((inbound.Length % IN_BUFFER) == 0)
+                inbound.Append(Encoding.ASCII.GetString(inData).Replace("\0", ""));
+                    if (inSize == IN_BUFFER)
+                        continue;
+
+                     using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"bouncer.txt", true))
+                    foreach (String line in inbound.ToString().Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries))
                     {
-                        string userHost;
+                        String extra;
+                        String target;
 
-                        if (line.Contains("\0"))
-                            continue;
-                        //Check for a prefix indicator.  If this isnt present the message cannot be processed
+//                        file.WriteLine(line);
+                        //Check for a prefix indicator.  If this isnt present the message cannot be processed.  We should probably throw an exception.
                         if (!line.Contains(':'))
-                            throw new ArgumentOutOfRangeException("Unable to parse message. " + line);
+                            continue;
 
-                        String[] parsedPrefix = line.Split(new string[] { ":" }, StringSplitOptions.RemoveEmptyEntries)[0].Split(' ');
+                        String prefix = line.Substring(line.IndexOf(':')).Split(' ')[0];
 
                         //Check if prefix is well formed
-                        if (parsedPrefix.Count() < 2)
-                        {
-                            int i = 0;
-                            while (RFC1459.commands.Contains(line.Split(':')[++i]   )  )
-                            {
-                                Console.WriteLine("no command detected");
-                                userHost = line.Split(':')[i];
-                            }
-                            
-
-                        }
-                            //else
-                            //    throw new ArgumentOutOfRangeException("Unable to parse prefix. " + line);
-
-                        userHost = parsedPrefix[0];
-                        string command = parsedPrefix[1];
-                        string userName = parsedPrefix[2];
+                        if (prefix.Length == 0)
+                            throw new Exception("unable to parse prefix");
+                        
+                        string command = line.Substring(prefix.Length).Split(new char[] { ':' }, StringSplitOptions.RemoveEmptyEntries)[0];
                         string logText = "";
 
                         //Check if source is blacklisted
-                        //if (m_BlackListHosts.Contains(userHost))
+                        //if (m_BlackListHosts.Contains(prefix))
                         //{
                         //    //TODO log this?
                         //    return;
                         //}
-                        //Examine the command
-                        switch (command)
+
+                        try
                         {
-                            case "PRIVMSG":
-                                logText = "PRIVMSG from " + userName;
-                                HandlePrivMsg(userName, encodedData.Substring(line.IndexOf(':', 1) + 1)); //skip the first ':' and grab everything after the second
-                                break;
-
-                            default:
-                                logText = "Unknown Message " + line;
-                                break;
-                        } 
+                            extra = line.Substring(command.Length + prefix.Length);
+                            if (extra.Length > 0)
+                                extra = extra.Substring(1); //Remove the ':' cos who needs it?
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new Exception("pasring error", ex);
+                        }
+                        //Examine the command
+                        if ((command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0].Length == 3) &&
+                            (!command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0].Equals("WHO")))//duurrrrr?
+                        {
+                            logText = " number ";
+                        }
+                        else
+                            switch (command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0])
+                            {
+                                case "NOTICE":
+                                case "PRIVMSG":
+                                    target = command.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[1];
+                                    if (target.Equals("AUTH"))
+                                    {
+                                        SendString("PASS tummyacid:s");
+                                        SendString("NICK tummyacid");
+                                    }
+                                    logText = target + prefix.Split('!')[0] + "> " + extra;
+                                    break;
+                                default:
+                                    logText = "Unknown Command " + command;
+                                    break;
+                            }
+                        Console.WriteLine(logText);
                     }
-
-
-
-
-
-                    if (Encoding.ASCII.GetString(inData).Contains("PASS"))
-                    {
-                        SendString("PASS tummyacid:s");
-                        SendString("NICK tummyacid");
-                    }
-                }   
+                    inbound.Clear();
+                }//Read socket again
             });
             listenThread.Start();
             // Convert the string data to byte data using ASCII encoding.
-            //SendString("USER tummyacid");
-            //SendString("PASS tummyacid:s");
-            SendString("USER tummyacid");
-
             Console.ReadLine();
             listenThread.Abort();
             m_Con.Close();
-
-
-
+            
         }
 
         private static void HandlePrivMsg(string userName, string p)
